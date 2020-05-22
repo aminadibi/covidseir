@@ -11,7 +11,7 @@
 
 **covidseir** fits a Bayesian SEIR (Susceptible, Exposed, Infectious, Recovered)
 model to daily COVID-19 case data. The package focuses on estimating the
-fraction of usual contacts encountered for individuals participating in physical
+fraction of the usual contact rate for individuals participating in physical
 distancing (social distancing). The model is coded in
 [**Stan**](https://mc-stan.org/). The model can accommodate multiple types of
 case data at once (e.g., reported cases, hospitalizations, ICU admissions) and
@@ -24,7 +24,7 @@ Anderson, S. C., Edwards, A. M., Yerlanov, M., Mulberry, N., Stockdale, J., Iyan
 
 ## Installation
 
-Before installation, you will need a [C++ compiler installed to compile the Stan model](https://github.com/stan-dev/rstan/wiki/RStan-Getting-Started).
+Before installation, you will need a [C++ compiler installed to compile the Stan model](https://github.com/stan-dev/rstan/wiki/RStan-Getting-Started). Note that if you are on Windows, you will need to follow the 'Configuration' section [here](https://github.com/stan-dev/rstan/wiki/Installing-RStan-from-source-on-Windows) not the one from the previous sentence. However, you likely do not need to follow the rest of the instructions from that page to install rstan itself from source.
 
 In particular, the following must return `TRUE` before continuing:
 
