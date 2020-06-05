@@ -13,6 +13,10 @@
 #' @param f_fixed An optional vector of fixed f values for the projection.
 #'   Should be length `forecast_days - (f_fixed_start - nrow(daily_cases) -
 #'   1)`. I.e. one value per day after `f_fixed_start` day.
+#' @param f_multi Multiplicative vector of f values. Same structure as `f_fixed`.
+#' @param f_multi_seg Which `f` to use for `f_multi`.
+#' @param imported_cases Number of cases to import starting on first projection day.
+#' @param imported_window Number of days over which to distribute imported cases.
 #' @param iter MCMC iterations to include. Defaults to all.
 #' @param return_states Logical for whether to return the ODE states.
 #' @param ... Other arguments to pass to [rstan::sampling()].
@@ -51,13 +55,11 @@
 #'   cases,
 #'   iter = 100,
 #'   chains = 1,
+#'   i0_prior = c(log(8), 0.2),
 #'   samp_frac_fixed = s1
 #' )
 #' print(m)
 #'
-# # For parallel processing (more important for more iterations):
-# # library(future)
-# # plan(multisession)
 #' p <- project_seir(m)
 #' p
 #'
@@ -74,13 +76,24 @@
 #' )
 #' p
 #' tidy_seir(p) %>% plot_projection(obs_dat = obs_dat)
+#'
+#' states_with_Rt <- get_rt(m)
+#' states_with_Rt
+#'
+#' library(ggplot2)
+#' ggplot(states_with_Rt, aes(time, Rt, group = .iteration)) +
+#'   geom_line(alpha = 0.5)
 project_seir <- function(
                          obj,
-                         forecast_days = 30,
+                         forecast_days = 0,
                          f_fixed_start = NULL,
                          f_fixed = NULL,
+                         f_multi = NULL,
+                         f_multi_seg = NULL,
                          iter = seq_along(obj$post$R0),
                          return_states = FALSE,
+                         imported_cases = 0,
+                         imported_window = 1,
                          ...) {
   if (!identical(class(obj), "covidseir")) {
     stop("`obj` must be of class `covidseir`.")
@@ -89,12 +102,20 @@ project_seir <- function(
   d <- obj$stan_data
   p <- obj$post
 
-  stopifnot(
-    (is.null(f_fixed_start) && is.null(f_fixed_start)) ||
-      (!is.null(f_fixed_start) && !is.null(f_fixed_start))
-  )
+  # stopifnot(
+  #   (is.null(f_fixed_start) && is.null(f_fixed_start)) ||
+  #     (!is.null(f_fixed_start) && !is.null(f_fixed_start))
+  # )
 
-  stopifnot(length(f_fixed) == forecast_days - (f_fixed_start - nrow(d$daily_cases) - 1))
+  if (!is.null(f_fixed) && !is.null(f_multi)) {
+    stop("!is.null(f_fixed) && !is.null(f_multi)", call. = FALSE)
+  }
+
+  if (!is.null(f_fixed))
+    stopifnot(length(f_fixed) == forecast_days - (f_fixed_start - nrow(d$daily_cases) - 1))
+
+  if (!is.null(f_multi))
+    stopifnot(length(f_multi) == forecast_days - (f_fixed_start - nrow(d$daily_cases) - 1))
 
   days <- seq(1L, nrow(d$daily_cases) + forecast_days)
   time_increment <- d$time[2] - d$time[1]
@@ -137,12 +158,57 @@ project_seir <- function(
   } else {
     d$x_i <- c(d$x_i, rep(d$x_i[length(d$x_i)], forecast_days))
   }
+
+  # FIXME: DRY
+  if (!is.null(f_multi)) {
+    d$S <- d$S + length(f_multi)
+    est_f_forecast_days <- f_fixed_start - nrow(d$daily_cases) - 1
+    d$x_i <- c(d$x_i, rep(d$x_i[length(d$x_i)], est_f_forecast_days))
+    fixed_f_forecast_ids <- seq(max_f_seg_id + 1, max_f_seg_id + length(f_multi))
+    d$x_i <- c(d$x_i, fixed_f_forecast_ids)
+  } else {
+    d$x_i <- c(d$x_i, rep(d$x_i[length(d$x_i)], forecast_days))
+  }
+
   d$x_i[["n_f_s"]] <- length(d$x_i) - 2 # 2 is number of non-f_s x_i values
   d$n_x_i <- length(d$x_i)
 
+  if (!"imported_cases" %in% names(d$x_r)) {
+    warning("Adding to `d$x_r`. Looks like an old model.", call. = FALSE)
+    d$x_r <- c(d$x_r, "imported_cases" = 0)
+  }
+  if (!"imported_window" %in% names(d$x_r)) {
+    warning("Adding to `d$x_r`. Looks like an old model.", call. = FALSE)
+    d$x_r <- c(d$x_r, "imported_window" = 1)
+  }
+  stopifnot(identical(names(d$x_r), c("N", "D", "k1", "k2", "q", "ud", "ur", "f0", "f_ramp_rate",
+    "imported_cases", "imported_window")))
+  d$x_r[names(d$x_r) == "imported_cases"] <- imported_cases
+  d$x_r[names(d$x_r) == "imported_window"] <- imported_window
+  d$n_x_r <- length(d$x_r)
+
   initf_project <- function(post, i, stan_data) {
     R0 <- post$R0[i]
-    f_s <- array(c(post$f_s[i, ], f_fixed))
+    i0 <- post$i0[i]
+    ur <- post$ur[i]
+    if (!is.null(f_fixed)) {
+      f_s <- array(c(post$f_s[i, ], f_fixed))
+    }
+    if (!is.null(f_multi)) {
+      fs <- post$f_s[i, ]
+      if (f_multi_seg > length(fs)) {
+        stop("`f_multi_seg` to large.", call. = FALSE)
+      }
+      proj_f <- fs[f_multi_seg]
+      f_s <- array(c(post$f_s[i, ], f_multi * proj_f))
+      if (max(f_s) >= 0.999) {
+        warning("f_s >= 0.999! Setting to 0.999.", call. = FALSE)
+        f_s <- ifelse(f_s >= 0.999, 0.999, f_s)
+      }
+    }
+    if (is.null(f_fixed) && is.null(f_multi)) {
+      f_s <- array(c(post$f_s[i, ], f_fixed))
+    }
     if ("phi" %in% names(post)) {
       phi <- array(post$phi[i, ])
     } else {
@@ -155,11 +221,11 @@ project_seir <- function(
     }
     start_decline <- post$start_decline[i]
     end_decline <- post$end_decline[i]
-    list(R0 = R0, f_s = f_s, phi = phi, samp_frac = samp_frac,
+    list(R0 = R0, i0 = i0, f_s = f_s, ur = ur, phi = phi, samp_frac = samp_frac,
       start_decline = start_decline, end_decline = end_decline)
   }
 
-  pars <- c("R0", "f_s", "phi", "mu", "y_rep")
+  pars <- c("R0", "i0", "f_s", "phi", "mu", "y_rep")
   if (return_states) pars <- c("y_hat")
 
   # out <- furrr::future_map_dfr(iter, function(i) {
@@ -194,14 +260,17 @@ project_seir <- function(
   # out <- bind_rows(out)
 
   if (return_states) {
+    states <- c("S", "E1", "E2", "I", "Q", "R", "Sd", "E1d", "E2d", "Id", "Qd", "Rd")
     variables_df <- dplyr::tibble(
-      variable = names(obj$state_0),
-      variable_num = seq_along(obj$state_0)
+      variable = states,
+      variable_num = seq_along(states)
     )
     ts_df <- dplyr::tibble(time = d$time, time_num = seq_along(d$time))
     out <- dplyr::rename(out, time_num = Var2, variable_num = Var3)
     out <- dplyr::left_join(out, variables_df, by = "variable_num")
     out <- dplyr::left_join(out, ts_df, by = "time_num")
+    out$variable_num <- NULL
+    out$time_num <- NULL
   } else {
     .forecast <- c(rep(FALSE, d$last_day_obs), rep(TRUE, forecast_days))
     out$forecast <- rep(.forecast, length(iter) * d$J)

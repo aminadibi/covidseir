@@ -6,11 +6,15 @@
 \usage{
 project_seir(
   obj,
-  forecast_days = 30,
+  forecast_days = 0,
   f_fixed_start = NULL,
   f_fixed = NULL,
+  f_multi = NULL,
+  f_multi_seg = NULL,
   iter = seq_along(obj$post$R0),
   return_states = FALSE,
+  imported_cases = 0,
+  imported_window = 1,
   ...
 )
 }
@@ -25,9 +29,17 @@ project_seir(
 \item{f_fixed}{An optional vector of fixed f values for the projection.
 Should be length \code{forecast_days - (f_fixed_start - nrow(daily_cases) - 1)}. I.e. one value per day after \code{f_fixed_start} day.}
 
+\item{f_multi}{Multiplicative vector of f values. Same structure as \code{f_fixed}.}
+
+\item{f_multi_seg}{Which \code{f} to use for \code{f_multi}.}
+
 \item{iter}{MCMC iterations to include. Defaults to all.}
 
 \item{return_states}{Logical for whether to return the ODE states.}
+
+\item{imported_cases}{Number of cases to import starting on first projection day.}
+
+\item{imported_window}{Number of days over which to distribute imported cases.}
 
 \item{...}{Other arguments to pass to \code{\link[rstan:sampling]{rstan::sampling()}}.}
 }
@@ -66,6 +78,7 @@ m <- fit_seir(
   cases,
   iter = 100,
   chains = 1,
+  i0_prior = c(log(8), 0.2),
   samp_frac_fixed = s1
 )
 print(m)
@@ -86,4 +99,11 @@ p <- project_seir(m,
 )
 p
 tidy_seir(p) \%>\% plot_projection(obs_dat = obs_dat)
+
+states_with_Rt <- get_rt(m)
+states_with_Rt
+
+library(ggplot2)
+ggplot(states_with_Rt, aes(time, Rt, group = .iteration)) +
+  geom_line(alpha = 0.5)
 }
