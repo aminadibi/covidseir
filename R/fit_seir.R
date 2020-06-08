@@ -207,22 +207,22 @@ fit_seir <- function(daily_cases,
       nrow(daily_cases)
     }
 
-  # if (names(x_r[1]) == "N" || names(state_0[1]) == "S") {
-  #   stop(
-  #     "It appears your code is set up for an older version ",
-  #     "of the package. ",
-  #     "(`names(x_r[1]) == 'N' || names(state_0[1]) == 'S')",
-  #     call. = FALSE)
-  # }
-  # stopifnot(
-  #   names(x_r) ==
-  #     c("D", "k1", "k2", "q", "ud", "ur", "f0")
-  # )
-  # x_r <- c(c("N" = N_pop), x_r)
-  # stopifnot(
-  #   names(state_0) == c("E1_frac", "E2_frac", "I_frac", "Q_num", "R_num", "E1d_frac",
-  #     "E2d_frac", "Id_frac", "Qd_num", "Rd_num")
-  # )
+   if (names(x_r[1]) == "N" || names(state_0[1]) == "S") {
+     stop(
+       "It appears your code is set up for an older version ",
+       "of the package. ",
+       "(`names(x_r[1]) == 'N' || names(state_0[1]) == 'S')",
+       call. = FALSE)
+   }
+   stopifnot(
+     names(x_r) ==
+       c("D", "k1", "k2", "q", "ud", "ur", "f0")
+   )
+   x_r <- c(c("N" = N_pop), x_r)
+   stopifnot(
+     names(state_0) == c("E1_frac", "E2_frac", "I_frac", "Q_num", "R_num", "E1d_frac",
+       "E2d_frac", "Id_frac", "Qd_num", "Rd_num")
+   )
 
   # Checks and type conversions:
   if (!is.matrix(daily_cases)) daily_cases <- matrix(daily_cases, ncol = 1)
