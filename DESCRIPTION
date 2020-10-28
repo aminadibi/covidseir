@@ -1,7 +1,7 @@
 Package: covidseir
 Title: Bayesian SEIR Modelling for Multivariate COVID-19 Case
     Data
-Version: 0.0.0.9006.1
+Version: 0.0.0.9010
 Authors@R: 
     c(person(given = c("Sean", "C."),
              family = "Anderson",
@@ -49,14 +49,17 @@ Description: Fits a Bayesian SEIR (Susceptible, Exposed,
     The model is coded in 'Stan'. The model can accommodate multiple types
     of case data at once (e.g., reported cases, hospitalizations, ICU
     admissions) and accounts for delays between symptom onset and case
-    appearance. This model is a continuation of the one described in the
-    preprint <doi:10.1101/2020.04.17.20070086>.
+    appearance. This model is a continuation of the models described in the
+    preprints <doi:10.1101/2020.04.17.20070086> and
+    <doi:10.1101/2020.06.12.20129833>.
 License: GPL-2
-Depends: 
+Depends:
     R (>= 3.5.0)
-Imports: 
+Imports:
     dplyr,
+    furrr,
     ggplot2,
+    glue,
     MASS,
     methods,
     purrr,
@@ -67,20 +70,22 @@ Imports:
     tidyr
 Suggests:
     knitr,
+    future,
+    lubridate,
     magrittr,
     rmarkdown,
     rstantools (>= 2.0.0)
-LinkingTo: 
+LinkingTo:
     BH (>= 1.66.0),
     Rcpp (>= 0.12.0),
     RcppEigen (>= 0.3.3.3.0),
     rstan (>= 2.18.1),
     StanHeaders (>= 2.18.0)
-VignetteBuilder: 
+VignetteBuilder:
     knitr
 Biarch: true
 Encoding: UTF-8
 LazyData: true
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.1.0
+RoxygenNote: 7.1.1.9000
 SystemRequirements: GNU make

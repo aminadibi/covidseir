@@ -15,6 +15,8 @@ project_seir(
   return_states = FALSE,
   imported_cases = 0,
   imported_window = 1,
+  parallel = TRUE,
+  X = obj$stan_data$X,
   ...
 )
 }
@@ -41,7 +43,11 @@ Should be length \code{forecast_days - (f_fixed_start - nrow(daily_cases) - 1)}.
 
 \item{imported_window}{Number of days over which to distribute imported cases.}
 
-\item{...}{Other arguments to pass to \code{\link[rstan:sampling]{rstan::sampling()}}.}
+\item{parallel}{Use parallel processing via \pkg{future} and \pkg{furrr}?}
+
+\item{X}{An optional model matrix that acts additively on log expected cases.}
+
+\item{...}{Other arguments to pass to \code{\link[rstan:stanmodel-method-sampling]{rstan::sampling()}}.}
 }
 \value{
 A data frame:
@@ -61,6 +67,10 @@ contacts encountered for those physical distancing). The function also includes
 functionality to specify a vector of fixed f values starting on a given
 future date.
 }
+\details{
+Set a \code{\link[future:plan]{future::plan()}} and this function will operate in parallel
+across MCMC iterations using \pkg{future} and \pkg{furrr}.
+}
 \examples{
 cases <- c(
   0, 0, 1, 3, 1, 8, 0, 6, 5, 0, 7, 7, 18, 9, 22, 38, 53, 45, 40,
@@ -73,13 +83,13 @@ s1 <- c(rep(0.1, 13), rep(0.2, length(cases) - 13))
 # To use parallel processing with multiple chains:
 # options(mc.cores = parallel::detectCores() / 2)
 
-# Only using 100 iterations and 1 chain for a quick example:
+# Using the MAP estimate for speed in this example:
 m <- fit_seir(
   cases,
   iter = 100,
-  chains = 1,
   i0_prior = c(log(8), 0.2),
-  samp_frac_fixed = s1
+  samp_frac_fixed = s1,
+  fit_type = "optimizing"
 )
 print(m)
 
@@ -91,6 +101,11 @@ obs_dat <- data.frame(day = seq_along(cases), value = cases)
 library(magrittr) # for \%>\%
 tidy_seir(p) \%>\% plot_projection(obs_dat = obs_dat)
 
+tidy_seir(p) \%>\%
+  plot_residuals(obs_dat = obs_dat, obj = m)
+
+# for parallel processing (optional)
+# future::plan(future::multisession)
 p <- project_seir(m,
   forecast_days = 100,
   f_fixed_start = 53,
@@ -99,6 +114,16 @@ p <- project_seir(m,
 )
 p
 tidy_seir(p) \%>\% plot_projection(obs_dat = obs_dat)
+
+
+# Get threshold for increase:
+# future::plan(future::multisession) # for parallel processing (optional)
+# (only using 40 iterations for a fast example)
+thresh <- get_threshold(m, iter = 1:40, show_plot = TRUE)
+mean(thresh)
+
+# Get doubling time (prevalence is declining in this example)
+get_doubling_time(m, iter = 1:40, show_plot = TRUE)
 
 states_with_Rt <- get_rt(m)
 states_with_Rt
