@@ -35,6 +35,10 @@ fit_seir(
   delay_scale = 9.85,
   delay_shape = 1.73,
   ode_control = c(1e-07, 1e-06, 1e+06),
+  fit_type = c("NUTS", "VB", "optimizing"),
+  init = c("prior_random", "optimizing"),
+  init_list = NULL,
+  X = NULL,
   ...
 )
 }
@@ -83,8 +87,9 @@ phi) and \code{Var(Y) = mu + mu^2 / phi}. See the Stan
 \href{https://github.com/stan-dev/stan/wiki/Prior-Choice-Recommendations}{Prior
 Choice Recommendations}.}
 
-\item{f_prior}{Beta mean and SD for the \code{f} parameters. FIXME: all \code{f}
-parameters must have the same prior currently. This will be fixed.}
+\item{f_prior}{Beta mean and SD for the \code{f} parameters. If S segments are
+used, should be a Sx2 matrix. If multiple \code{f} segments are used but
+only one mean and SD are specified, they will be repeated as needed.}
 
 \item{e_prior}{Beta mean and SD for the \code{e} (derived) parameter.
 \code{e} represents the fraction of people who are social distancing.}
@@ -141,7 +146,21 @@ format as for \code{delay_scale}.}
 difference, then absolute difference, and then maximum iterations. These
 can likely be left as is.}
 
-\item{...}{Other arguments to pass to \code{\link[rstan:sampling]{rstan::sampling()}} / \code{\link[rstan:stan]{rstan::stan()}}.}
+\item{fit_type}{Stan sampling/fitting algorithm to use. NUTS =
+\code{\link[rstan:stanmodel-method-sampling]{rstan::sampling()}} or \code{\link[rstan:stan]{rstan::stan()}}; VB = \code{\link[rstan:stanmodel-method-vb]{rstan::vb()}}; optimizing =
+\code{\link[rstan:stanmodel-method-optimizing]{rstan::optimizing()}}.}
+
+\item{init}{Initialization type. Draw randomly from the prior or try to use
+the MAP estimate? Can be overridden by the \code{init_list} argument.}
+
+\item{init_list}{An optional named list foreign initialization. Note that the
+\code{f_s} argument needs to be an array of appropriate length. See the example
+below.}
+
+\item{X}{An optional model matrix applied additively to log expected cases.}
+
+\item{...}{Other arguments to pass to \code{\link[rstan:stanmodel-method-sampling]{rstan::sampling()}} / \code{\link[rstan:stan]{rstan::stan()}} /
+\code{\link[rstan:stanmodel-method-vb]{rstan::vb()}} / \code{\link[rstan:stanmodel-method-optimizing]{rstan::optimizing()}}.}
 }
 \value{
 A named list object
@@ -151,7 +170,6 @@ This function fits a Stan SEIR model to one or more sets of COVID-19 case
 data. See \code{\link[=project_seir]{project_seir()}} for making predictions/projections.
 }
 \examples{
-\donttest{
 # Example daily case data:
 cases <- c(
   0, 0, 1, 3, 1, 8, 0, 6, 5, 0, 7, 7, 18, 9, 22, 38, 53, 45, 40,
@@ -165,11 +183,11 @@ s1 <- c(rep(0.1, 13), rep(0.2, length(cases) - 13))
 # To use parallel processing with multiple chains:
 # options(mc.cores = parallel::detectCores() / 2)
 
-# Only using 100 iterations and 1 chain for a quick example:
+# Only using 200 iterations and MAP (optimizing) fitting for example speed:
 m <- fit_seir(
   cases,
-  iter = 100,
-  chains = 1,
+  iter = 200,
+  fit_type = "optimizing",
   samp_frac_fixed = s1
 )
 print(m)
@@ -189,28 +207,41 @@ hosp <- c(
   7, 19, 23, 13, 11, 3, 13, 21, 14, 17, 29, 21, 19, 19, 10, 6,
   11, 8, 11, 8, 7, 6
 )
+
+# Only using 200 iterations and MAP (optimizing) fitting for example speed:
 m2 <- fit_seir(
   daily_cases = cbind(cases, hosp),
-  iter = 100,
-  chains = 1,
+  iter = 200,
   samp_frac_type = "segmented", # `samp_frac_type` affects the first data type only
   samp_frac_seg = samp_frac_seg,
   samp_frac_fixed = cbind(s1, s2), # s1 is ignored and could be anything
   delay_scale = c(9.8, 11.2),
   delay_shape = c(1.7, 1.9),
+  fit_type = "optimizing"
 )
 print(m2)
 
 # Estimate a second f_s segment:
 f_seg <- c(rep(0, 14), rep(1, 20), rep(2, length(cases) - 20 - 14))
+f_prior <- matrix(c(0.4,0.6, rep(0.2,2)), ncol=2, nrow=2) # nrow corresponds to num f_s segments
+
+# Only using 200 iterations and MAP (optimizing) fitting for example speed:
 m3 <- fit_seir(
   cases,
-  iter = 100,
-  chains = 1,
+  iter = 200,
   f_seg = f_seg,
-  samp_frac_fixed = s1
+  f_prior = f_prior,
+  samp_frac_fixed = s1,
+  fit_type = "optimizing"
 )
 print(m3)
-}
 
+# Choose initial values as a named list:
+m <- fit_seir(cases,
+  fit_type = "optimizing",
+  samp_frac_fixed = s1,
+  init_list = list(
+    R0 = 3, f_s = array(0.2), # note that `f_s` is an array of appropriate length
+    i0 = 5, ur = 0.025, start_decline = 15, end_decline = 22)
+)
 }

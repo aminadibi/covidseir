@@ -36,8 +36,9 @@
 #'   phi) and `Var(Y) = mu + mu^2 / phi`. See the Stan
 #'   \href{https://github.com/stan-dev/stan/wiki/Prior-Choice-Recommendations}{Prior
 #'   Choice Recommendations}.
-#' @param f_prior Beta mean and SD for the `f` parameters. FIXME: all `f`
-#'   parameters must have the same prior currently. This will be fixed.
+#' @param f_prior Beta mean and SD for the `f` parameters. If S segments are
+#'   used, should be a Sx2 matrix. If multiple `f` segments are used but
+#'   only one mean and SD are specified, they will be repeated as needed.
 #' @param e_prior Beta mean and SD for the `e` (derived) parameter.
 #'   `e` represents the fraction of people who are social distancing.
 #' @param samp_frac_prior `samp_frac` prior if `samp_frac_type` is "estimated"
@@ -76,11 +77,20 @@
 #' @param ode_control Control options for the Stan ODE solver. First is relative
 #'   difference, then absolute difference, and then maximum iterations. These
 #'   can likely be left as is.
-#' @param ... Other arguments to pass to [rstan::sampling()] / [rstan::stan()].
+#' @param fit_type Stan sampling/fitting algorithm to use. NUTS =
+#'   [rstan::sampling()] or [rstan::stan()]; VB = [rstan::vb()]; optimizing =
+#'   [rstan::optimizing()].
+#' @param init Initialization type. Draw randomly from the prior or try to use
+#'   the MAP estimate? Can be overridden by the `init_list` argument.
+#' @param init_list An optional named list foreign initialization. Note that the
+#'   `f_s` argument needs to be an array of appropriate length. See the example
+#'   below.
+#' @param X An optional model matrix applied additively to log expected cases.
+#' @param ... Other arguments to pass to [rstan::sampling()] / [rstan::stan()] /
+#'   [rstan::vb()] / [rstan::optimizing()].
 #' @export
 #' @return A named list object
 #' @examples
-#' \donttest{
 #' # Example daily case data:
 #' cases <- c(
 #'   0, 0, 1, 3, 1, 8, 0, 6, 5, 0, 7, 7, 18, 9, 22, 38, 53, 45, 40,
@@ -94,11 +104,11 @@
 #' # To use parallel processing with multiple chains:
 #' # options(mc.cores = parallel::detectCores() / 2)
 #'
-#' # Only using 100 iterations and 1 chain for a quick example:
+#' # Only using 200 iterations and MAP (optimizing) fitting for example speed:
 #' m <- fit_seir(
 #'   cases,
-#'   iter = 100,
-#'   chains = 1,
+#'   iter = 200,
+#'   fit_type = "optimizing",
 #'   samp_frac_fixed = s1
 #' )
 #' print(m)
@@ -118,30 +128,44 @@
 #'   7, 19, 23, 13, 11, 3, 13, 21, 14, 17, 29, 21, 19, 19, 10, 6,
 #'   11, 8, 11, 8, 7, 6
 #' )
+#'
+#' # Only using 200 iterations and MAP (optimizing) fitting for example speed:
 #' m2 <- fit_seir(
 #'   daily_cases = cbind(cases, hosp),
-#'   iter = 100,
-#'   chains = 1,
+#'   iter = 200,
 #'   samp_frac_type = "segmented", # `samp_frac_type` affects the first data type only
 #'   samp_frac_seg = samp_frac_seg,
 #'   samp_frac_fixed = cbind(s1, s2), # s1 is ignored and could be anything
 #'   delay_scale = c(9.8, 11.2),
 #'   delay_shape = c(1.7, 1.9),
+#'   fit_type = "optimizing"
 #' )
 #' print(m2)
 #'
 #' # Estimate a second f_s segment:
 #' f_seg <- c(rep(0, 14), rep(1, 20), rep(2, length(cases) - 20 - 14))
+#' f_prior <- matrix(c(0.4,0.6, rep(0.2,2)), ncol=2, nrow=2) # nrow corresponds to num f_s segments
+#'
+#' # Only using 200 iterations and MAP (optimizing) fitting for example speed:
 #' m3 <- fit_seir(
 #'   cases,
-#'   iter = 100,
-#'   chains = 1,
+#'   iter = 200,
 #'   f_seg = f_seg,
-#'   samp_frac_fixed = s1
+#'   f_prior = f_prior,
+#'   samp_frac_fixed = s1,
+#'   fit_type = "optimizing"
 #' )
 #' print(m3)
-#' }
 #'
+#' # Choose initial values as a named list:
+#' m <- fit_seir(cases,
+#'   fit_type = "optimizing",
+#'   samp_frac_fixed = s1,
+#'   init_list = list(
+#'     R0 = 3, f_s = array(0.2), # note that `f_s` is an array of appropriate length
+#'     i0 = 5, ur = 0.025, start_decline = 15, end_decline = 22)
+#' )
+
 fit_seir <- function(daily_cases,
                      obs_model = c("NB2", "Poisson"),
                      forecast_days = 0,
@@ -164,7 +188,8 @@ fit_seir <- function(daily_cases,
                      chains = 4,
                      iter = 2000,
                      N_pop = 5.1e6,
-                     pars = c(D = 5, k1 = 1 / 5,
+                     pars = c(
+                       D = 5, k1 = 1 / 5,
                        k2 = 1, q = 0.05,
                        ud = 0.1, ur = 0.02, f0 = 1.0
                      ),
@@ -185,6 +210,10 @@ fit_seir <- function(daily_cases,
                      delay_scale = 9.85,
                      delay_shape = 1.73,
                      ode_control = c(1e-7, 1e-6, 1e6),
+                     fit_type = c("NUTS", "VB", "optimizing"),
+                     init = c("prior_random", "optimizing"),
+                     init_list = NULL,
+                     X = NULL,
                      ...) {
   obs_model <- match.arg(obs_model)
   obs_model <-
@@ -207,29 +236,44 @@ fit_seir <- function(daily_cases,
       nrow(daily_cases)
     }
 
-   if (names(x_r[1]) == "N" || names(state_0[1]) == "S") {
-     stop(
-       "It appears your code is set up for an older version ",
-       "of the package. ",
-       "(`names(x_r[1]) == 'N' || names(state_0[1]) == 'S')",
-       call. = FALSE)
-   }
-   stopifnot(
-     names(x_r) ==
-       c("D", "k1", "k2", "q", "ud", "ur", "f0")
-   )
-   x_r <- c(c("N" = N_pop), x_r)
-   stopifnot(
-     names(state_0) == c("E1_frac", "E2_frac", "I_frac", "Q_num", "R_num", "E1d_frac",
-       "E2d_frac", "Id_frac", "Qd_num", "Rd_num")
-   )
+  if (names(x_r[1]) == "N" || names(state_0[1]) == "S") {
+    stop(
+      "It appears your code is set up for an older version ",
+      "of the package. ",
+      "(`names(x_r[1]) == 'N' || names(state_0[1]) == 'S')",
+      call. = FALSE
+    )
+  }
+  stopifnot(
+    names(x_r) ==
+      c("D", "k1", "k2", "q", "ud", "ur", "f0")
+  )
+  x_r <- c(c("N" = N_pop), x_r)
+  stopifnot(
+    names(state_0) == c(
+      "E1_frac", "E2_frac", "I_frac", "Q_num", "R_num", "E1d_frac",
+      "E2d_frac", "Id_frac", "Qd_num", "Rd_num"
+    )
+  )
 
   # Checks and type conversions:
   if (!is.matrix(daily_cases)) daily_cases <- matrix(daily_cases, ncol = 1)
   if (!is.matrix(samp_frac_prior)) samp_frac_prior <- matrix(samp_frac_prior, ncol = 1)
   if (!is.matrix(samp_frac_fixed)) samp_frac_fixed <- matrix(samp_frac_fixed, ncol = 1)
+  if (!is.matrix(f_prior)) f_prior <- matrix(f_prior, ncol = 2)
   stopifnot(length(delay_scale) == ncol(daily_cases))
   stopifnot(length(delay_shape) == ncol(daily_cases))
+
+  if (is.null(X)) X <- matrix(0, nrow = nrow(daily_cases), ncol = 0L)
+
+  S <- length(unique(f_seg)) - 1 # - 1 because of 0 for fixed f0 before soc. dist.
+  if (nrow(f_prior) == 1 && S > 1) {
+    warning("Expanding `f_prior` to match `f_seg`.", call. = FALSE)
+    f_prior <- do.call("rbind", replicate(S, f_prior, simplify = FALSE))
+  }
+  if (S != nrow(f_prior) && nrow(f_prior) > 1) {
+    stop("`nrow(f_prior)` does not match `length(unique(f_seg)) - 1`.", call. = FALSE)
+  }
 
   days <- seq(1, nrow(daily_cases) + forecast_days)
   last_day_obs <- nrow(daily_cases)
@@ -249,10 +293,16 @@ fit_seir <- function(daily_cases,
   stopifnot(nrow(samp_frac_fixed) == length(days))
   stopifnot(ncol(samp_frac_fixed) == ncol(daily_cases))
 
-  beta_sd <- f_prior[2]
-  beta_mean <- f_prior[1]
-  beta_shape1 <- get_beta_params(beta_mean, beta_sd)$alpha
-  beta_shape2 <- get_beta_params(beta_mean, beta_sd)$beta
+  # f_prior
+  f_seg_prior <- f_prior
+  for (s in 1:S) {
+    beta_sd <- f_seg_prior[s, 2]
+    beta_mean <- f_seg_prior[s, 1]
+    beta_shape1 <- get_beta_params(beta_mean, beta_sd)$alpha
+    beta_shape2 <- get_beta_params(beta_mean, beta_sd)$beta
+    f_seg_prior[s, ] <- c(beta_shape1, beta_shape2)
+  }
+
 
   if (samp_frac_type == "fixed") {
     samp_frac_prior <- c(1, 1) # fake
@@ -291,7 +341,7 @@ fit_seir <- function(daily_cases,
     daily_cases = daily_cases_stan,
     J = ncol(daily_cases),
     N = length(days),
-    S = length(unique(f_seg)) - 1, # - 1 because of 0 for fixed f0 before soc. dist.
+    S = S,
     y0_vars = state_0,
     t0 = min(time) - 0.000001,
     time = time,
@@ -309,7 +359,7 @@ fit_seir <- function(daily_cases,
     R0_prior = R0_prior,
     phi_prior = phi_prior,
     i0_prior = i0_prior,
-    f_prior = c(beta_shape1, beta_shape2),
+    f_prior = f_seg_prior,
     samp_frac_prior = samp_frac_prior_trans,
     e_prior = e_prior_trans,
     start_decline_prior = start_decline_prior,
@@ -321,44 +371,119 @@ fit_seir <- function(daily_cases,
     obs_model = obs_model,
     contains_NAs = contains_NAs,
     ode_control = ode_control,
-    est_phi = if (obs_model %in% 1L) ncol(daily_cases) else 0L
+    est_phi = if (obs_model %in% 1L) ncol(daily_cases) else 0L,
+    X = X,
+    K = ncol(X)
   )
-  # map_estimate <- rstan::optimizing(
-  #   stanmodels$seir,
-  #   data = stan_data
-  # )
   initf <- function(stan_data) {
-    R0 <- stats::rlnorm(1, R0_prior[1], R0_prior[2]/2)
-    i0 <- stats::rlnorm(1, i0_prior[1], i0_prior[2]/2)
-    start_decline <- stats::rlnorm(1, start_decline_prior[1], start_decline_prior[2]/2)
-    end_decline <- stats::rlnorm(1, end_decline_prior[1], end_decline_prior[2]/2)
-    f <- stats::rbeta(
-      1,
-      get_beta_params(f_prior[1], f_prior[2]/4)$alpha,
-      get_beta_params(f_prior[1], f_prior[2]/4)$beta
-    )
+    R0 <- stats::rlnorm(1, R0_prior[1], R0_prior[2] / 2)
+    i0 <- stats::rlnorm(1, i0_prior[1], i0_prior[2] / 2)
+    start_decline <- stats::rlnorm(1, start_decline_prior[1], start_decline_prior[2] / 2)
+    end_decline <- stats::rlnorm(1, end_decline_prior[1], end_decline_prior[2] / 2)
+    f_s <- array(0, dim = stan_data$S)
+    for (s in 1:stan_data$S) {
+      f_s[s] <- stats::rbeta(
+        1,
+        get_beta_params(f_prior[s, 1], f_prior[s, 2] / 4)$alpha,
+        get_beta_params(f_prior[s, 1], f_prior[s, 2] / 4)$beta
+      )
+    }
+    beta <- array(rep(0, stan_data$K))
     ur <- get_ur(e_prior[1], pars[["ud"]])
-    f_s <- array(f, dim = stan_data$S)
     init <- list(R0 = R0, f_s = f_s, i0 = i0,
-      ur = ur,
+      ur = ur, beta = beta,
       start_decline = start_decline, end_decline = end_decline)
     init
   }
-  pars_save <- c("R0", "f_s", "i0", "e", "ur", "phi", "mu", "y_rep",
-    "start_decline", "end_decline", "samp_frac")
+  pars_save <- c(
+    "R0", "f_s", "i0", "e", "ur", "phi", "mu", "y_rep",
+    "start_decline", "end_decline", "samp_frac", "beta"
+  )
   if (save_state_predictions) pars_save <- c(pars_save, "y_hat")
   set.seed(seed)
-  fit <- rstan::sampling(
-    stanmodels$seir,
-    data = stan_data,
-    iter = iter,
-    chains = chains,
-    init = function() initf(stan_data),
-    seed = seed, # https://xkcd.com/221/
-    pars = pars_save,
-    ... = ...
-  )
-  post <- rstan::extract(fit)
+
+  fit_type <- match.arg(fit_type)
+
+  init <- match.arg(init)
+  .initf <- if (is.null(init_list)) function() initf(stan_data) else init_list
+
+  opt <- NA
+  if ((fit_type == "NUTS" && init == "optimizing") || fit_type == "optimizing") {
+    opt <- tryCatch({
+      cat("Finding the MAP estimate.\n")
+      opt <- rstan::optimizing(
+        stanmodels$seir,
+        data = stan_data,
+        init = .initf,
+        seed = seed,
+        hessian = TRUE,
+        draws = iter,
+        iter = 1e5,
+        as_vector = TRUE,
+        ...
+      )
+    }, error = function(e) {print(e);NA})
+    if (identical(opt, NA)) {
+      warning("rstan::optimizing() failed to converge.", call. = FALSE)
+    }
+  }
+
+  if (identical(opt, NA) || fit_type == "VB" || init == "prior_random") {
+    .initf <- function() initf(stan_data)
+  } else if (fit_type == "NUTS") {
+    cat("Using the MAP estimate for initialization.\n")
+    p <- opt$par
+    np <- names(p)
+    .initf <- function() {
+      list(
+        R0 = unname(p[np == "R0"]),
+        f_s = unname(p[grep("f_s\\[", np)]),
+        i0 = unname(p[np == "i0"]),
+        ur = unname(p[np == "ur"]),
+        beta = unname(p[np == "beta"]),
+        start_decline = unname(p[np == "start_decline"]),
+        end_decline = unname(p[np == "end_decline"])
+      )
+    }
+  }
+
+  .initf <- if (is.null(init_list)) .initf else init_list
+
+  if (fit_type == "NUTS") {
+    cat("Sampling with the NUTS HMC sampler.\n")
+    fit <- rstan::sampling(
+      stanmodels$seir,
+      data = stan_data,
+      iter = iter,
+      chains = chains,
+      init = .initf,
+      seed = seed,
+      pars = pars_save,
+      ... = ...
+    )
+  }
+  if (fit_type == "VB") {
+    cat("Sampling with the VB algorithm.\n")
+    fit <- rstan::vb(
+      stanmodels$seir,
+      data = stan_data,
+      iter = iter,
+      init = .initf,
+      seed = seed,
+      pars = pars_save,
+      algorithm = "fullrank",
+      tol_rel_obj = 0.0001,
+      importance_resampling = TRUE,
+      ... = ...
+    )
+  }
+  if (fit_type != "optimizing") {
+    post <- rstan::extract(fit)
+  } else {
+    post <- convert_theta_tilde_to_list(opt$theta_tilde)
+    fit <- opt
+  }
+
   structure(list(
     fit = fit, post = post, phi_prior = phi_prior, R0_prior = R0_prior,
     f_prior = f_prior, obs_model = obs_model,
@@ -368,9 +493,10 @@ fit_seir <- function(daily_cases,
     samp_frac_fixed = samp_frac_fixed, state_0 = state_0,
     daily_cases = daily_cases, days = days, time = time,
     last_day_obs = last_day_obs, pars = x_r,
-    f2_prior_beta_shape1 = beta_shape1,
-    f2_prior_beta_shape2 = beta_shape2,
-    stan_data = stan_data, days_back = days_back
+    f2_prior_beta_shape1 = f_seg_prior[, 1],
+    f2_prior_beta_shape2 = f_seg_prior[, 2],
+    stan_data = stan_data, days_back = days_back,
+    opt = opt, fit_type = fit_type
   ), class = "covidseir")
 }
 
@@ -395,3 +521,25 @@ get_time_day_id0 <- function(day, time, days_back) {
 
 get_ur <- function(e, ud) (ud - e * ud) / e
 getu <- function(f, r) (r - f * r) / f
+
+convert_theta_tilde_to_list <- function(s) {
+  if (!any(grepl("phi\\[", colnames(s))))
+    stop("Optimizing isn't set up for the Poisson distribution.", call. = FALSE)
+
+  beta_n <- grep("beta\\[", colnames(s))
+  phi_n <- grep("phi\\[", colnames(s))
+  e_n <- grep("^e$", colnames(s))
+  ur_n <- grep("^ur$", colnames(s))
+  pars_n <- c(seq_len(phi_n), ur_n, e_n, beta_n)
+
+  s <- s[, pars_n]
+  f_s_n <- grep("f_s\\[", colnames(s))
+  s1 <- s[, f_s_n, drop = FALSE]
+  s2 <- s[, -f_s_n, drop = FALSE]
+  l2 <- lapply(seq_len(ncol(s2)), function(i) s2[, i])
+  names(l2) <- colnames(s2)
+  out <- c(l2, list(f_s = s1))
+  names(out) <- sub("phi\\[1\\]", "phi", names(out))
+  out$phi <- matrix(out$phi, ncol = 1L)
+  out
+}
