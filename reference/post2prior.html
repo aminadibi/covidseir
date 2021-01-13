@@ -6,7 +6,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>Plot a SEIR model projection — plot_projection • covidseir</title>
+<title>Extract new priors from a previous fit — post2prior • covidseir</title>
 
 
 <!-- jquery -->
@@ -39,8 +39,10 @@
 
 
 
-<meta property="og:title" content="Plot a SEIR model projection — plot_projection" />
-<meta property="og:description" content="Plot a SEIR model projection" />
+<meta property="og:title" content="Extract new priors from a previous fit — post2prior" />
+<meta property="og:description" content="This function takes a model fit with fit_seir() and converts the posterior
+distribution into priors that can be fed into a second model. This allows
+splitting a time series into multiple blocks." />
 
 
 
@@ -121,101 +123,83 @@
 <div class="row">
   <div class="col-md-9 contents">
     <div class="page-header">
-    <h1>Plot a SEIR model projection</h1>
+    <h1>Extract new priors from a previous fit</h1>
     
-    <div class="hidden name"><code>plot_projection.Rd</code></div>
+    <div class="hidden name"><code>post2prior.Rd</code></div>
     </div>
 
     <div class="ref-description">
-    <p>Plot a SEIR model projection</p>
+    <p>This function takes a model fit with <code><a href='fit_seir.html'>fit_seir()</a></code> and converts the posterior
+distribution into priors that can be fed into a second model. This allows
+splitting a time series into multiple blocks.</p>
     </div>
 
-    <pre class="usage"><span class='fu'>plot_projection</span><span class='op'>(</span>
-  <span class='va'>pred_dat</span>,
-  <span class='va'>obs_dat</span>,
-  col <span class='op'>=</span> <span class='st'>"#377EB8"</span>,
-  value_column <span class='op'>=</span> <span class='st'>"value"</span>,
-  date_column <span class='op'>=</span> <span class='st'>"day"</span>,
-  ylab <span class='op'>=</span> <span class='st'>"Reported cases"</span>,
-  Rt <span class='op'>=</span> <span class='cn'>NULL</span>
-<span class='op'>)</span>
-
-<span class='fu'>plot_residuals</span><span class='op'>(</span>
-  <span class='va'>pred_dat</span>,
-  <span class='va'>obs_dat</span>,
-  <span class='va'>obj</span>,
-  value_column <span class='op'>=</span> <span class='st'>"value"</span>,
-  date_column <span class='op'>=</span> <span class='st'>"day"</span>,
-  type <span class='op'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/c.html'>c</a></span><span class='op'>(</span><span class='st'>"raw"</span>, <span class='st'>"quantile"</span><span class='op'>)</span>,
-  ylab <span class='op'>=</span> <span class='kw'>if</span> <span class='op'>(</span><span class='va'>type</span> <span class='op'>==</span> <span class='st'>"raw"</span><span class='op'>)</span> <span class='st'>"Residual"</span> <span class='kw'>else</span> <span class='st'>"Quantile residual"</span>,
-  date_function <span class='op'>=</span> <span class='fu'>lubridate</span><span class='fu'>::</span><span class='va'><a href='http://lubridate.tidyverse.org/reference/ymd.html'>ymd</a></span>,
-  return_residuals <span class='op'>=</span> <span class='cn'>FALSE</span>
-<span class='op'>)</span></pre>
+    <pre class="usage"><span class='fu'>post2prior</span><span class='op'>(</span><span class='va'>obj</span>, iter <span class='op'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/seq.html'>seq_len</a></span><span class='op'>(</span><span class='fl'>100</span><span class='op'>)</span>, time_slice <span class='op'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/Extremes.html'>max</a></span><span class='op'>(</span><span class='va'>proj</span><span class='op'>$</span><span class='va'>time</span><span class='op'>)</span><span class='op'>)</span></pre>
 
     <h2 class="hasAnchor" id="arguments"><a class="anchor" href="#arguments"></a>Arguments</h2>
     <table class="ref-arguments">
     <colgroup><col class="name" /><col class="desc" /></colgroup>
     <tr>
-      <th>pred_dat</th>
-      <td><p>Output from <code><a href='tidy_seir.html'>tidy_seir()</a></code>.</p></td>
-    </tr>
-    <tr>
-      <th>obs_dat</th>
-      <td><p>A data frame of observed data. Should have a column of <code>day</code>
-and <code>value</code> that matches <code>pred_dat</code>. If using multiple data types, should
-also have <code>data_type</code>.</p></td>
-    </tr>
-    <tr>
-      <th>col</th>
-      <td><p>Colour for the line and ribbon.</p></td>
-    </tr>
-    <tr>
-      <th>value_column</th>
-      <td><p>Column in <code>obs_dat</code> that contains the reported cases.</p></td>
-    </tr>
-    <tr>
-      <th>date_column</th>
-      <td><p>Date or day column name. A column by this name must be in
-<code>obs_dat</code> and <code>pred_dat</code>. Note that <code><a href='tidy_seir.html'>tidy_seir()</a></code> will return a data frame
-with <code>day</code> in it. If you want dates then you will need to add such a
-column.</p></td>
-    </tr>
-    <tr>
-      <th>ylab</th>
-      <td><p>Y axis label.</p></td>
-    </tr>
-    <tr>
-      <th>Rt</th>
-      <td><p>An optional vector of Rt values to colour the plot by.</p></td>
-    </tr>
-    <tr>
       <th>obj</th>
-      <td><p>Outut from <code><a href='fit_seir.html'>fit_seir()</a></code>.</p></td>
+      <td><p>A model fit with <code><a href='fit_seir.html'>fit_seir()</a></code>.</p></td>
     </tr>
     <tr>
-      <th>type</th>
-      <td><p>Raw (observed - expected) or quantile residuals (<code>covidseir:::qres_nbinom2</code>)?</p></td>
+      <th>iter</th>
+      <td><p>Iterations to use went creating projections to extract the state
+posterior.</p></td>
     </tr>
     <tr>
-      <th>date_function</th>
-      <td><p>A function to translate the character representation of</p></td>
-    </tr>
-    <tr>
-      <th>return_residuals</th>
-      <td><p>Return residuals instead of plot?</p></td>
+      <th>time_slice</th>
+      <td><p>When to take the state priors at. Defaults to the
+end of the fit.</p></td>
     </tr>
     </table>
 
-    <h2 class="hasAnchor" id="value"><a class="anchor" href="#value"></a>Value</h2>
-
-    <p>A ggplot object</p>
-    <h2 class="hasAnchor" id="details"><a class="anchor" href="#details"></a>Details</h2>
-
-    <p>See <code><a href='project_seir.html'>project_seir()</a></code> for an example.</p>
 
     <h2 class="hasAnchor" id="examples"><a class="anchor" href="#examples"></a>Examples</h2>
-    <pre class="examples"><div class='input'><span class='co'># See ?project_seir</span>
-</div></pre>
+    <pre class="examples"><div class='input'><span class='co'># See the vignette 'Fitting case data in multiple blocks'</span>
+<span class='co'># for a complete example</span>
+
+<span class='va'>cases</span> <span class='op'>&lt;-</span> <span class='fu'><a href='https://rdrr.io/r/base/c.html'>c</a></span><span class='op'>(</span>
+  <span class='fl'>0</span>, <span class='fl'>0</span>, <span class='fl'>1</span>, <span class='fl'>3</span>, <span class='fl'>1</span>, <span class='fl'>8</span>, <span class='fl'>0</span>, <span class='fl'>6</span>, <span class='fl'>5</span>, <span class='fl'>0</span>, <span class='fl'>7</span>, <span class='fl'>7</span>, <span class='fl'>18</span>, <span class='fl'>9</span>, <span class='fl'>22</span>, <span class='fl'>38</span>, <span class='fl'>53</span>, <span class='fl'>45</span>, <span class='fl'>40</span>,
+  <span class='fl'>77</span>, <span class='fl'>76</span>, <span class='fl'>48</span>, <span class='fl'>67</span>, <span class='fl'>78</span>, <span class='fl'>42</span>, <span class='fl'>66</span>, <span class='fl'>67</span>, <span class='fl'>92</span>, <span class='fl'>16</span>, <span class='fl'>70</span>, <span class='fl'>43</span>, <span class='fl'>53</span>, <span class='fl'>55</span>, <span class='fl'>53</span>, <span class='fl'>29</span>,
+  <span class='fl'>26</span>, <span class='fl'>37</span>, <span class='fl'>25</span>, <span class='fl'>45</span>, <span class='fl'>34</span>, <span class='fl'>40</span>, <span class='fl'>35</span>
+<span class='op'>)</span>
+<span class='va'>s1</span> <span class='op'>&lt;-</span> <span class='fu'><a href='https://rdrr.io/r/base/c.html'>c</a></span><span class='op'>(</span><span class='fu'><a href='https://rdrr.io/r/base/rep.html'>rep</a></span><span class='op'>(</span><span class='fl'>0.1</span>, <span class='fl'>13</span><span class='op'>)</span>, <span class='fu'><a href='https://rdrr.io/r/base/rep.html'>rep</a></span><span class='op'>(</span><span class='fl'>0.2</span>, <span class='fu'><a href='https://rdrr.io/r/base/length.html'>length</a></span><span class='op'>(</span><span class='va'>cases</span><span class='op'>)</span> <span class='op'>-</span> <span class='fl'>13</span><span class='op'>)</span><span class='op'>)</span>
+<span class='va'>m</span> <span class='op'>&lt;-</span> <span class='fu'><a href='fit_seir.html'>fit_seir</a></span><span class='op'>(</span>
+  <span class='va'>cases</span>,
+  iter <span class='op'>=</span> <span class='fl'>200</span>,
+  fit_type <span class='op'>=</span> <span class='st'>"optimizing"</span>,
+  samp_frac_fixed <span class='op'>=</span> <span class='va'>s1</span>
+<span class='op'>)</span>
+</div><div class='output co'>#&gt; Finding the MAP estimate.</div><div class='input'><span class='fu'>post2prior</span><span class='op'>(</span><span class='va'>m</span>, iter <span class='op'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/seq.html'>seq_len</a></span><span class='op'>(</span><span class='fl'>10</span><span class='op'>)</span><span class='op'>)</span> <span class='co'># just 10 for example speed</span>
+</div><div class='output co'>#&gt; $R0
+#&gt; [1] 1.21978417 0.08001301
+#&gt; 
+#&gt; $i0
+#&gt; [1] 7.64153273 0.08844256
+#&gt; 
+#&gt; $e
+#&gt; [1] 0.82600448 0.04157469
+#&gt; 
+#&gt; $phi
+#&gt; [1] 1.9357203 0.3255403
+#&gt; 
+#&gt; $f
+#&gt; [1] 0.19456721 0.08779538
+#&gt; 
+#&gt; $start_decline
+#&gt; [1] 0.0 0.1
+#&gt; 
+#&gt; $end_decline
+#&gt; [1] 0.0 0.1
+#&gt; 
+#&gt; $state_0
+#&gt;     E1_frac     E2_frac      I_frac       Q_num       R_num    E1d_frac 
+#&gt;   0.6602933   0.1150118   0.2890190  15.1256445 163.2298501   0.6125361 
+#&gt;    E2d_frac     Id_frac      Qd_num      Rd_num 
+#&gt;   0.1066115   0.2673027  66.2332312 711.7988096 
+#&gt; </div></pre>
   </div>
   <div class="col-md-3 hidden-xs hidden-sm" id="pkgdown-sidebar">
     <nav id="toc" data-toggle="toc" class="sticky-top">
