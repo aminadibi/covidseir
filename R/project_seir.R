@@ -84,6 +84,10 @@
 #' p
 #' tidy_seir(p) %>% plot_projection(obs_dat = obs_dat)
 #'
+#' # fake example to show optional Rt colouring:
+#' proj <- tidy_seir(p)
+#' plot_projection(proj, obs_dat = obs_dat, Rt = rlnorm(nrow(proj)), col = "#00000050")
+#'
 #'
 #' # Get threshold for increase:
 #' # future::plan(future::multisession) # for parallel processing (optional)
@@ -220,7 +224,7 @@ project_seir <- function(
     d$x_r <- c(d$x_r, "imported_window" = 1)
   }
   stopifnot(identical(names(d$x_r), c(
-    "N", "D", "k1", "k2", "q", "ud", "ur", "f0", "f_ramp_rate",
+    "N", "D", "k1", "k2", "q", "ud", "ur", "f0", "use_ramp",
     "imported_cases", "imported_window"
   )))
   d$x_r[names(d$x_r) == "imported_cases"] <- imported_cases
@@ -309,7 +313,7 @@ project_seir <- function(
     df
   }
   if (parallel) {
-    out <- furrr::future_map_dfr(iter, proj_func, .options = furrr::future_options(seed = TRUE))
+    out <- furrr::future_map_dfr(iter, proj_func, .options = furrr::furrr_options(seed = TRUE))
   } else {
     out <- purrr::map_dfr(iter, proj_func)
   }
