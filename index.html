@@ -101,16 +101,16 @@
 <h2 class="hasAnchor">
 <a href="#overview" class="anchor"></a>Overview</h2>
 <p><strong>covidseir</strong> fits a Bayesian SEIR (Susceptible, Exposed, Infectious, Recovered) model to daily COVID-19 case data. The package focuses on estimating the fraction of the usual contact rate for individuals participating in physical distancing (social distancing). The model is coded in <a href="https://mc-stan.org/"><strong>Stan</strong></a>. The model can accommodate multiple types of case data at once (e.g., reported cases, hospitalizations, ICU admissions) and accounts for delays between symptom onset and case appearance.</p>
-<p>The model is a continuation of the model described in the preprints:</p>
-<p>Anderson, S. C., Edwards, A. M., Yerlanov, M., Mulberry, N., Stockdale, J., Iyaniwura, S. A., Falcao, R. C., Otterstatter, M. C., Irvine, M. A., Janjua, N. Z., Coombs, D., &amp; Colijn, C. (2020). Estimating the impact of COVID-19 control measures using a Bayesian model of physical distancing. medRxiv, 2020.04.17.20070086. <a href="https://doi.org/10.1101/2020.04.17.20070086" class="uri">https://doi.org/10.1101/2020.04.17.20070086</a></p>
-<p>Anderson, S. C., Mulberry, N., Edwards, A. M., Stockdale, J. E., Iyaniwura, S. A., Falcao, R. C., Otterstatter, M. C., Janjua, N. Z., Coombs, D., and Colijn, C. (2020). How much leeway is there to relax COVID-19 control measures? medRxiv 2020.06.12.20129833. <a href="https://doi.org/10.1101/2020.06.12.20129833" class="uri">https://doi.org/10.1101/2020.06.12.20129833</a></p>
+<p>The model is a continuation of the model described in the papers:</p>
+<p>Anderson, S. C., Edwards, A. M., Yerlanov, M., Mulberry, N., Stockdale, J., Iyaniwura, S. A., Falcao, R. C., Otterstatter, M. C., Irvine, M. A., Janjua, N. Z., Coombs, D., &amp; Colijn, C. (2020). Quantifying the impact of COVID-19 control measures using a Bayesian model of physical distancing. PLoS Computational Biology. 16(12): e1008274. <a href="https://doi.org/10.1371/journal.pcbi.1008274" class="uri">https://doi.org/10.1371/journal.pcbi.1008274</a></p>
+<p>Anderson, S. C., Mulberry, N., Edwards, A. M., Stockdale, J. E., Iyaniwura, S. A., Falcao, R. C., Otterstatter, M. C., Janjua, N. Z., Coombs, D., and Colijn, C. (2021). How much leeway is there to relax COVID-19 control measures? Epidemics. 100453. <a href="https://doi.org/10.1016/j.epidem.2021.100453" class="uri">https://doi.org/10.1016/j.epidem.2021.100453</a></p>
 <p><a href="https://phil.cdc.gov/Details.aspx?pid=23311">Illustration for logo by Alissa Eckert, MSMI; Dan Higgins, MAMS</a>.</p>
 <p><em>This package is a work in progress: arguments and output format may still change and not all functionality has been tested.</em></p>
 </div>
 <div id="installation" class="section level2">
 <h2 class="hasAnchor">
 <a href="#installation" class="anchor"></a>Installation</h2>
-<p>Before installation, you will need a C++ compiler installed to compile the Stan model. If you are on a Mac or Linux, follow <a href="https://github.com/stan-dev/rstan/wiki/RStan-Getting-Started">these instructions</a>. If you are on Windows, follow the ‘Configuration’ section <a href="https://github.com/stan-dev/rstan/wiki/Installing-RStan-from-source-on-Windows">here</a> (you do not need to follow the rest of the instructions from that page to install rstan itself from source).</p>
+<p>Before installation, you will need a C++ compiler installed to compile the Stan model. Follow the relevant instructions on configuring a C++ toolchain for your operating system <a href="https://github.com/stan-dev/rstan/wiki/RStan-Getting-Started">on the rstan wiki</a>.</p>
 <p>The following must return <code>TRUE</code> before continuing:</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span class="co"># install.packages("pkgbuild")</span>
